@@ -3,13 +3,68 @@ import type {
 	WorkflowInstanceRestartOptions,
 	WorkflowInstanceTerminateOptions,
 } from "@cloudflare/workflows-shared/src/binding";
+import type { WorkflowBatchDeleteResult } from "@cloudflare/workflows-shared/src/types";
 import type { WorkflowIntrospectionOperation } from "@cloudflare/workflows-shared/src/types";
 
+type Env = {
+	binding: WorkflowBinding;
+	MINIFLARE_LOOPBACK?: Fetcher;
+	MINIFLARE_WORKFLOW_NAME?: string;
+};
+
+async function waitForPersistedInstanceDelete(
+	env: Env,
+	binding: WorkflowBinding,
+	id: string | undefined
+): Promise<void> {
+	if (
+		id === undefined ||
+		env.MINIFLARE_LOOPBACK === undefined ||
+		env.MINIFLARE_WORKFLOW_NAME === undefined
+	) {
+		return;
+	}
+
+	const hexId = await binding.unsafeGetInstanceStorageId(id);
+	const response = await env.MINIFLARE_LOOPBACK.fetch(
+		`http://localhost/core/workflow-storage/${encodeURIComponent(env.MINIFLARE_WORKFLOW_NAME)}/${hexId}?waitForPendingDelete=1`
+	);
+	if (!response.ok) {
+		throw new Error(
+			`Failed to wait for persisted workflow instance '${id}' deletion`
+		);
+	}
+}
+
+async function deletePersistedInstance(env: Env, id: string): Promise<void> {
+	if (
+		env.MINIFLARE_LOOPBACK === undefined ||
+		env.MINIFLARE_WORKFLOW_NAME === undefined
+	) {
+		return;
+	}
+
+	await env.binding.unsafeAbort(id);
+
+	const hexId = await env.binding.unsafeGetInstanceStorageId(id);
+	const response = await env.MINIFLARE_LOOPBACK.fetch(
+		`http://localhost/core/workflow-storage/${encodeURIComponent(env.MINIFLARE_WORKFLOW_NAME)}/${hexId}`,
+		{ method: "DELETE" }
+	);
+	if (!response.ok && response.status !== 404) {
+		throw new Error(`Failed to delete persisted workflow instance '${id}'`);
+	}
+}
+
 class WorkflowImpl implements Workflow {
-	constructor(private binding: WorkflowBinding) {}
+	private binding: WorkflowBinding;
+
+	constructor(private env: Env) {
+		this.binding = env.binding;
+	}
 
 	async get(id: string): Promise<WorkflowInstance> {
-		const instanceHandle = new InstanceImpl(id, this.binding);
+		const instanceHandle = new InstanceImpl(id, this.binding, this.env);
 		// throws instance.not_found if instance doesn't exist
 		// this is needed for backwards compat
 		await instanceHandle.status();
@@ -19,19 +74,67 @@ class WorkflowImpl implements Workflow {
 	async create(
 		options?: WorkflowInstanceCreateOptions
 	): Promise<WorkflowInstance> {
+		await waitForPersistedInstanceDelete(this.env, this.binding, options?.id);
 		using result = (await this.binding.create(options)) as WorkflowInstance &
 			Disposable;
 
-		return new InstanceImpl(result.id, this.binding);
+		return new InstanceImpl(result.id, this.binding, this.env);
 	}
 
 	async createBatch(
 		options: WorkflowInstanceCreateOptions[]
 	): Promise<WorkflowInstance[]> {
+		await Promise.all(
+			options.map(({ id }) =>
+				waitForPersistedInstanceDelete(this.env, this.binding, id)
+			)
+		);
 		const result = await this.binding.createBatch(options);
 		return result.map((res) => {
-			return new InstanceImpl(res.id, this.binding);
+			return new InstanceImpl(res.id, this.binding, this.env);
 		});
+	}
+
+	async deleteBatch(instanceIds: string[]): Promise<WorkflowBatchDeleteResult> {
+		const result = await this.binding.deleteBatch({ instances: instanceIds });
+		const cleanupIds = [
+			...new Set([
+				...result.deleted.map(({ id }) => id),
+				...result.errors
+					.filter(({ code }) => code === 10400)
+					.map(({ id }) => id),
+			]),
+		];
+		const missingIds = new Set(
+			result.errors.filter(({ code }) => code === 10400).map(({ id }) => id)
+		);
+		const cleanups = await Promise.allSettled(
+			cleanupIds.map((id) =>
+				missingIds.has(id)
+					? deletePersistedInstance(this.env, id)
+					: waitForPersistedInstanceDelete(this.env, this.binding, id)
+			)
+		);
+		const failedCleanupIds = new Set(
+			cleanupIds.filter((_, index) => cleanups[index]?.status === "rejected")
+		);
+		if (failedCleanupIds.size === 0) {
+			return result;
+		}
+
+		const errorsById = new Map(result.errors.map((error) => [error.id, error]));
+		return {
+			deleted: result.deleted.filter(({ id }) => !failedCleanupIds.has(id)),
+			errors: instanceIds.flatMap((id) => {
+				if (failedCleanupIds.has(id)) {
+					return [
+						{ id, code: 10001, message: "workflows.api.error.internal_server" },
+					];
+				}
+				const error = errorsById.get(id);
+				return error === undefined ? [] : [error];
+			}),
+		};
 	}
 
 	async unsafeGetBindingName(): Promise<string> {
@@ -88,7 +191,8 @@ class WorkflowImpl implements Workflow {
 class InstanceImpl implements WorkflowInstance {
 	constructor(
 		public id: string,
-		private binding: WorkflowBinding
+		private binding: WorkflowBinding,
+		private env: Env
 	) {}
 
 	private async getInstance(): Promise<WorkflowInstance & Disposable> {
@@ -124,6 +228,13 @@ class InstanceImpl implements WorkflowInstance {
 		await instance.restart(options);
 	}
 
+	public async delete(): Promise<void> {
+		using instance = await this.getInstance();
+		// TODO(vaish): remove cast once @cloudflare/workers-types ships instance delete
+		await (instance as unknown as { delete(): Promise<void> }).delete();
+		await waitForPersistedInstanceDelete(this.env, this.binding, this.id);
+	}
+
 	public async status(): Promise<InstanceStatus> {
 		using instance = await this.getInstance();
 		using res = (await instance.status()) as InstanceStatus & Disposable;
@@ -139,8 +250,8 @@ class InstanceImpl implements WorkflowInstance {
 	}
 }
 
-export function makeBinding(env: { binding: WorkflowBinding }): Workflow {
-	return new WorkflowImpl(env.binding);
+export function makeBinding(env: Env): Workflow {
+	return new WorkflowImpl(env);
 }
 
 export default makeBinding;
