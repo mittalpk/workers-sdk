@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Miniflare, RATELIMIT_PLUGIN_NAME } from "miniflare";
 import { test } from "vitest";
-import { useDispose, useTmp } from "../../test-shared";
+import { singleModuleManifest, useDispose, useTmp } from "../../test-shared";
 import type { MiniflareOptions } from "miniflare";
 
 /**
@@ -47,18 +47,23 @@ async function waitForFreshRateLimitWindow(
 
 test("ratelimit", async ({ expect }) => {
 	const mf = new Miniflare({
-		ratelimits: {
-			TESTRATE: {
-				namespace_id: "test-namespace",
-				simple: {
-					limit: 2,
-					period: 60,
-				},
-			},
-		},
-
-		modules: true,
-		script: `
+		workers: [
+			{
+				config: {
+					type: "worker",
+					name: "",
+					compatibilityDate: "2025-05-01",
+					env: {
+						TESTRATE: {
+							type: "rate-limit",
+							namespace: "test-namespace",
+							simple: {
+								limit: 2,
+								period: 60,
+							},
+						},
+					},
+					manifest: singleModuleManifest(`
 		export default {
 			async fetch(request, env, ctx) {
 				const { success } = await env.TESTRATE.limit({
@@ -70,7 +75,10 @@ test("ratelimit", async ({ expect }) => {
 				return new Response("success", { status: 200 });
 			},
 		}
-		`,
+		`),
+				},
+			},
+		],
 	});
 	useDispose(mf);
 
@@ -90,18 +98,23 @@ test("ratelimit", async ({ expect }) => {
 
 test("ratelimit validation", async ({ expect }) => {
 	const mf = new Miniflare({
-		ratelimits: {
-			TESTRATE: {
-				namespace_id: "test-namespace",
-				simple: {
-					limit: 2,
-					period: 60,
-				},
-			},
-		},
-
-		modules: true,
-		script: `
+		workers: [
+			{
+				config: {
+					type: "worker",
+					name: "",
+					compatibilityDate: "2025-05-01",
+					env: {
+						TESTRATE: {
+							type: "rate-limit",
+							namespace: "test-namespace",
+							simple: {
+								limit: 2,
+								period: 60,
+							},
+						},
+					},
+					manifest: singleModuleManifest(`
 		export default {
 			async fetch(request, env, ctx) {
 				const options = await request.json()
@@ -113,7 +126,10 @@ test("ratelimit validation", async ({ expect }) => {
 				return new Response("should have resulted in error", { status: 500 });
 			},
 		}
-		`,
+		`),
+				},
+			},
+		],
 	});
 	useDispose(mf);
 
@@ -155,25 +171,32 @@ test("ratelimit validation", async ({ expect }) => {
 
 test("ratelimit counters are keyed by namespace_id", async ({ expect }) => {
 	const mf = new Miniflare({
-		ratelimits: {
-			// Two bindings sharing a namespace_id must share a single counter...
-			RATE_A: {
-				namespace_id: "shared",
-				simple: { limit: 2, period: 60 },
-			},
-			RATE_B: {
-				namespace_id: "shared",
-				simple: { limit: 2, period: 60 },
-			},
-			// ...while a distinct namespace_id stays isolated.
-			RATE_C: {
-				namespace_id: "other",
-				simple: { limit: 2, period: 60 },
-			},
-		},
-
-		modules: true,
-		script: `
+		workers: [
+			{
+				config: {
+					type: "worker",
+					name: "",
+					compatibilityDate: "2025-05-01",
+					env: {
+						// Two bindings sharing a namespace must share a single counter...
+						RATE_A: {
+							type: "rate-limit",
+							namespace: "shared",
+							simple: { limit: 2, period: 60 },
+						},
+						RATE_B: {
+							type: "rate-limit",
+							namespace: "shared",
+							simple: { limit: 2, period: 60 },
+						},
+						// ...while a distinct namespace stays isolated.
+						RATE_C: {
+							type: "rate-limit",
+							namespace: "other",
+							simple: { limit: 2, period: 60 },
+						},
+					},
+					manifest: singleModuleManifest(`
 		export default {
 			async fetch(request, env, ctx) {
 				const binding = new URL(request.url).searchParams.get("b");
@@ -183,7 +206,10 @@ test("ratelimit counters are keyed by namespace_id", async ({ expect }) => {
 				});
 			},
 		}
-		`,
+		`),
+				},
+			},
+		],
 	});
 	useDispose(mf);
 
