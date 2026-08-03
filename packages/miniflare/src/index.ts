@@ -3228,3 +3228,4 @@ export type {
 	LegacyConfig,
 	InstanceOptions,
 } from "./config/schema";
+export type { V4MiniflareOptions } from "./config/v4-schema";
