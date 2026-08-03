@@ -606,8 +606,6 @@ export interface WorkerLoaderBinding {
 }
 
 interface WorkflowBindingOptions {
-	/** The user-chosen name of the Workflow. */
-	name: string;
 	/** The name of the Worker that defines the Workflow. */
 	workerName: string;
 	/** The exported class name of the Workflow. */

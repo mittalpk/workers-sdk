@@ -12,7 +12,6 @@ import {
 	UnsafeBindingSchema,
 	WorkerBindingSchema,
 	WorkerEntrypointExportSchema,
-	WorkflowExportSchema,
 	KVBindingSchema,
 	D1BindingSchema,
 	R2BindingSchema,
@@ -245,6 +244,14 @@ const HelloWorldBindingSchema = z.strictObject({
 	enable_timer: z.boolean().optional(),
 });
 
+const MiniflareWorkflowBindingSchema = z.strictObject({
+	type: z.literal("workflow"),
+	name: z.string(),
+	workerName: z.string(),
+	exportName: z.string(),
+	remote: z.boolean().optional(),
+});
+
 // The miniflare-extended schemas below replace these base `@cloudflare/config`
 // binding schemas (which have optional `id`/`name`) with variants that require
 // those fields.
@@ -285,6 +292,7 @@ const MiniflareKnownBindingSchema = z.discriminatedUnion("type", [
 	NetworkServiceBindingSchema,
 	DiskServiceBindingSchema,
 	HelloWorldBindingSchema,
+	MiniflareWorkflowBindingSchema,
 	...PassthroughBindingSchemas,
 ]);
 
@@ -334,6 +342,12 @@ export const MiniflareDurableObjectExportSchema =
 		container: z.custom<DOContainerOptions>().optional(),
 	});
 
+const MiniflareWorkflowExportSchema = z.strictObject({
+	type: z.literal("workflow"),
+	name: z.string(),
+	limits: z.strictObject({ steps: z.number().optional() }).optional(),
+});
+
 // Compose the union explicitly (rather than filtering `ExportSchema.options`)
 // so the inferred type is precise: the miniflare-extended "created" variant
 // replaces the plain one, and `Array.prototype.filter` can't narrow the element
@@ -345,7 +359,7 @@ const MiniflareExportSchema = z.union([
 	DurableObjectTransferredExportSchema,
 	DurableObjectExpectingTransferExportSchema,
 	WorkerEntrypointExportSchema,
-	WorkflowExportSchema,
+	MiniflareWorkflowExportSchema,
 ]);
 
 // ---------------------------------------------------------------------------

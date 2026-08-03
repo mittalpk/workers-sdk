@@ -77,7 +77,7 @@ export const RATELIMIT_PLUGIN: Plugin = {
 			])
 		);
 	},
-	async getServices({ options, tmpPath, resourcePersistencePath }) {
+	async getServices({ options, tmpPath, sharedOptions }) {
 		const ratelimits = getEnvBindingsOfType(options.config, "rate-limit");
 		if (ratelimits.length === 0) {
 			return [];
@@ -96,7 +96,7 @@ export const RATELIMIT_PLUGIN: Plugin = {
 		const persistPath = getPersistPath(
 			RATELIMIT_PLUGIN_NAME,
 			tmpPath,
-			resourcePersistencePath
+			sharedOptions.resourcePersistencePath
 		);
 		await fs.mkdir(persistPath, { recursive: true });
 		services.push({

@@ -45,6 +45,33 @@ async function waitForFreshRateLimitWindow(
 	}
 }
 
+type RateLimitEnv = NonNullable<
+	MiniflareOptions["workers"][number]["config"]["env"]
+>;
+
+function createRateLimitOptions(options: {
+	env?: RateLimitEnv;
+	script: string;
+	resourcePersistencePath?: string;
+}): MiniflareOptions {
+	return {
+		...(options.resourcePersistencePath
+			? { resourcePersistencePath: options.resourcePersistencePath }
+			: {}),
+		workers: [
+			{
+				config: {
+					type: "worker",
+					name: "",
+					compatibilityDate: "2025-05-01",
+					...(options.env ? { env: options.env } : {}),
+					manifest: singleModuleManifest(options.script),
+				},
+			},
+		],
+	};
+}
+
 test("ratelimit", async ({ expect }) => {
 	const mf = new Miniflare({
 		workers: [
@@ -235,23 +262,24 @@ test("ratelimit counters are keyed by namespace_id", async ({ expect }) => {
 });
 
 test("ratelimit counters are scoped per period", async ({ expect }) => {
-	const mf = new Miniflare({
-		ratelimits: {
-			// Same namespace, different windows. Production identifies a counter by
-			// bucket index and bucket start timestamp, both derived from the period,
-			// so these two must not share (nor clobber) a counter.
-			RATE_SLOW: {
-				namespace_id: "shared",
-				simple: { limit: 1, period: 60 },
+	const mf = new Miniflare(
+		createRateLimitOptions({
+			env: {
+				// Same namespace, different windows. Production identifies a counter by
+				// bucket index and bucket start timestamp, both derived from the period,
+				// so these two must not share (nor clobber) a counter.
+				RATE_SLOW: {
+					type: "rate-limit",
+					namespace: "shared",
+					simple: { limit: 1, period: 60 },
+				},
+				RATE_FAST: {
+					type: "rate-limit",
+					namespace: "shared",
+					simple: { limit: 1, period: 10 },
+				},
 			},
-			RATE_FAST: {
-				namespace_id: "shared",
-				simple: { limit: 1, period: 10 },
-			},
-		},
-
-		modules: true,
-		script: `
+			script: `
 		export default {
 			async fetch(request, env, ctx) {
 				const binding = new URL(request.url).searchParams.get("b");
@@ -262,7 +290,8 @@ test("ratelimit counters are scoped per period", async ({ expect }) => {
 			},
 		}
 		`,
-	});
+		})
+	);
 	useDispose(mf);
 
 	const call = async (b: string) => {
@@ -285,15 +314,14 @@ test("ratelimit counters are scoped per period", async ({ expect }) => {
 });
 
 test("ratelimit counters survive a workerd restart", async ({ expect }) => {
-	const options = {
-		ratelimits: {
+	const options = createRateLimitOptions({
+		env: {
 			TESTRATE: {
-				namespace_id: "restart",
+				type: "rate-limit",
+				namespace: "restart",
 				simple: { limit: 1, period: 60 },
 			},
 		},
-
-		modules: true,
 		script: `
 		export default {
 			async fetch(request, env, ctx) {
@@ -304,7 +332,7 @@ test("ratelimit counters survive a workerd restart", async ({ expect }) => {
 			},
 		}
 		`,
-	} satisfies MiniflareOptions;
+	});
 
 	const mf = new Miniflare(options);
 	useDispose(mf);
@@ -329,16 +357,15 @@ test("ratelimit counters survive a workerd restart", async ({ expect }) => {
 
 test("ratelimit persists on file-system", async ({ expect }) => {
 	const tmp = await useTmp();
-	const options = {
-		ratelimits: {
+	const options = createRateLimitOptions({
+		env: {
 			TESTRATE: {
-				namespace_id: "persist",
+				type: "rate-limit",
+				namespace: "persist",
 				simple: { limit: 1, period: 60 },
 			},
 		},
 		resourcePersistencePath: tmp,
-
-		modules: true,
 		script: `
 		export default {
 			async fetch(request, env, ctx) {
@@ -349,7 +376,7 @@ test("ratelimit persists on file-system", async ({ expect }) => {
 			},
 		}
 		`,
-	} satisfies MiniflareOptions;
+	});
 
 	const call = async (mf: Miniflare) => {
 		const res = await mf.dispatchFetch("http://localhost");
@@ -378,16 +405,12 @@ test("ratelimit creates no storage directory when unconfigured", async ({
 	expect,
 }) => {
 	const tmp = await useTmp();
-	// Wrangler passes an empty object rather than omitting `ratelimits` when a
-	// Worker declares no rate limit bindings, so this must not leave a stray
-	// directory behind in the user's persistence directory.
-	const mf = new Miniflare({
-		ratelimits: {},
-		resourcePersistencePath: tmp,
-
-		modules: true,
-		script: `export default { fetch: () => new Response("ok") }`,
-	});
+	const mf = new Miniflare(
+		createRateLimitOptions({
+			resourcePersistencePath: tmp,
+			script: `export default { fetch: () => new Response("ok") }`,
+		})
+	);
 	useDispose(mf);
 
 	const res = await mf.dispatchFetch("http://localhost");
