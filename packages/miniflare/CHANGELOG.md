@@ -1,5 +1,47 @@
 # miniflare
 
+## 5.20260731.0-alpha
+
+### Patch Changes
+
+- [#14984](https://github.com/cloudflare/workers-sdk/pull/14984) [`9c74538`](https://github.com/cloudflare/workers-sdk/commit/9c7453837e3293787c0cb1778520f630aea7e5ca) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update dependencies of "miniflare", "wrangler"
+
+  The following dependency versions have been updated:
+
+  | Dependency                | From          | To            |
+  | ------------------------- | ------------- | ------------- |
+  | @cloudflare/workers-types | ^5.20260730.1 | ^5.20260731.1 |
+  | workerd                   | 1.20260730.1  | 1.20260731.1  |
+
+- [#14968](https://github.com/cloudflare/workers-sdk/pull/14968) [`a88d169`](https://github.com/cloudflare/workers-sdk/commit/a88d1691d57bf44616ad15556a51b7f8ca17375c) Thanks [@petebacondarwin](https://github.com/petebacondarwin)! - Fix local rate limiting being disabled entirely when bindings share a `namespace_id` but use different periods
+
+  The emulated Ratelimit binding tracked one counter per key per namespace, ignoring the period. Two bindings pointing at the same `namespace_id` with different `simple.period` values therefore overwrote each other's counter on every call — each one seeing a window it did not recognise, and so resetting the count to zero — with the result that neither binding ever limited anything:
+
+  ```jsonc
+  {
+    "ratelimits": [
+      {
+        "name": "BURST",
+        "namespace_id": "1001",
+        "simple": { "limit": 20, "period": 10 }
+      },
+      {
+        "name": "SUSTAINED",
+        "namespace_id": "1001",
+        "simple": { "limit": 50, "period": 60 }
+      }
+    ]
+  }
+  ```
+
+  Counters are now tracked per period, matching production, where a counter is identified by a bucket index and bucket start timestamp that are both derived from the period. Bindings that share a `namespace_id` and a period still share a counter for a given key.
+
+- [#14968](https://github.com/cloudflare/workers-sdk/pull/14968) [`a88d169`](https://github.com/cloudflare/workers-sdk/commit/a88d1691d57bf44616ad15556a51b7f8ca17375c) Thanks [@petebacondarwin](https://github.com/petebacondarwin)! - Fix local rate limit counters silently resetting after ~10s of inactivity
+
+  The emulated Ratelimit binding kept its counters on the JS heap of an internal Durable Object. `workerd` evicts idle Durable Objects after around 10 seconds, taking the counters with them, so in `wrangler dev` you could hit your Worker, pause to look at something, and find your limit had silently reset part way through the window.
+
+  Counters now live in the Durable Object's storage, which survives eviction. They are still cleared by `deleteAllDurableObjects()`, so `reset()` from `@cloudflare/vitest-pool-workers` continues to reset rate limit state between tests, exactly as it does for KV, R2 and D1. Counters are now also written to the persistence directory, so they survive a `wrangler dev` restart within the same window.
+
 ## 5.20260730.0-alpha
 
 ### Major Changes

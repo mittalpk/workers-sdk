@@ -1,5 +1,38 @@
 # wrangler
 
+## 4.119.0
+
+### Minor Changes
+
+- [#14952](https://github.com/cloudflare/workers-sdk/pull/14952) [`20470fa`](https://github.com/cloudflare/workers-sdk/commit/20470fa8b09761c50b5c2c1d6a5f2652b61bd271) Thanks [@nelsonjsduarte](https://github.com/nelsonjsduarte)! - Add `--parse-type` flag to `wrangler ai-search create`
+
+  `wrangler ai-search create` now accepts `--parse-type` to control how a website data source discovers URLs. `sitemap` (the default) reads XML sitemaps; `discover` follows links recursively.
+
+  Previously the parse type could only be chosen through the interactive wizard, which was skipped whenever `--source` was supplied — so it was impossible to create a `discover` instance from a script.
+
+  ```sh
+  wrangler ai-search create my-instance \
+    --type web-crawler \
+    --source https://example.com \
+    --parse-type discover
+  ```
+
+  The interactive wizard now offers `Discover` alongside `Sitemap`. `--parse-type` is only valid with `--type web-crawler`; passing it with `--type builtin` or `--type r2` is rejected, since the API stores the value for those source types but never reads it. When the flag is omitted in non-interactive mode the field is left unset and the API default (`sitemap`) applies.
+
+### Patch Changes
+
+- [#14984](https://github.com/cloudflare/workers-sdk/pull/14984) [`9c74538`](https://github.com/cloudflare/workers-sdk/commit/9c7453837e3293787c0cb1778520f630aea7e5ca) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update dependencies of "miniflare", "wrangler"
+
+  The following dependency versions have been updated:
+
+  | Dependency                | From          | To            |
+  | ------------------------- | ------------- | ------------- |
+  | @cloudflare/workers-types | ^5.20260730.1 | ^5.20260731.1 |
+  | workerd                   | 1.20260730.1  | 1.20260731.1  |
+
+- Updated dependencies [[`9c74538`](https://github.com/cloudflare/workers-sdk/commit/9c7453837e3293787c0cb1778520f630aea7e5ca), [`a88d169`](https://github.com/cloudflare/workers-sdk/commit/a88d1691d57bf44616ad15556a51b7f8ca17375c), [`a88d169`](https://github.com/cloudflare/workers-sdk/commit/a88d1691d57bf44616ad15556a51b7f8ca17375c)]:
+  - miniflare@5.20260731.0-alpha
+
 ## 4.118.0
 
 ### Minor Changes
