@@ -15,14 +15,14 @@ const kUnsafeEphemeralUniqueKey = Symbol.for(
 	"miniflare.kUnsafeEphemeralUniqueKey"
 );
 
-interface V4WorkerdStructuredLog {
+export interface V4WorkerdStructuredLog {
 	timestamp: number;
 	level: string;
 	message: string;
 }
 
-type V4FetchHandler = (request: Request) => Awaitable<Response>;
-type V4NodeHandler = (
+export type V4FetchHandler = (request: Request) => Awaitable<Response>;
+export type V4NodeHandler = (
 	req: http.IncomingMessage,
 	res: http.ServerResponse
 ) => Awaitable<void>;
@@ -635,11 +635,274 @@ export const V4MiniflareOptionsSchema = V4SharedOptionsSchema.and(
 	])
 );
 
-export type V4WorkerOptions = z.input<typeof V4WorkerOptionsSchema>;
+export type V4ModuleRuleType =
+	| "ESModule"
+	| "CommonJS"
+	| "Text"
+	| "Data"
+	| "CompiledWasm"
+	| "PythonModule"
+	| "PythonRequirement";
+export type V4ModuleRule = {
+	type: V4ModuleRuleType;
+	include: string[];
+	fallthrough?: boolean;
+};
+export type V4ModuleDefinition = {
+	type: V4ModuleRuleType;
+	path: string;
+	contents?: string | Uint8Array;
+};
+export type V4SourceOptions =
+	| { modules: V4ModuleDefinition[]; modulesRoot?: string }
+	| {
+			script: string;
+			scriptPath?: string;
+			modules?: boolean;
+			modulesRules?: V4ModuleRule[];
+			modulesRoot?: string;
+	  }
+	| {
+			scriptPath: string;
+			modules?: boolean;
+			modulesRules?: V4ModuleRule[];
+			modulesRoot?: string;
+	  };
+export type V4ServiceDesignator =
+	| string
+	| symbol
+	| {
+			name: string | symbol;
+			entrypoint?: string;
+			props?: Record<string, unknown>;
+			remoteProxyConnectionString?: RemoteProxyConnectionString;
+	  }
+	| { network: { allow?: string[]; deny?: string[]; tlsOptions?: unknown } }
+	| { external: { address: string; http?: unknown; https?: unknown } }
+	| { disk: { path: string; writable?: boolean } }
+	| { node: V4NodeHandler }
+	| V4FetchHandler;
+export type V4IdEntry = {
+	id: string;
+	remoteProxyConnectionString?: RemoteProxyConnectionString;
+};
+export type V4Namespace = Record<string, string | V4IdEntry> | string[];
+export type V4DurableObject = {
+	className: string;
+	scriptName?: string;
+	useSQLite?: boolean;
+	unsafeUniqueKey?: string | symbol;
+	unsafePreventEviction?: boolean;
+	remoteProxyConnectionString?: RemoteProxyConnectionString;
+	container?: { imageName: string };
+};
+export type V4QueueProducerOptions = {
+	queueName: string;
+	deliveryDelay?: number;
+	remoteProxyConnectionString?: RemoteProxyConnectionString;
+};
+export type V4QueueConsumerOptions = {
+	maxBatchSize?: number;
+	maxBatchTimeout?: number;
+	maxRetries?: number;
+	deadLetterQueue?: string;
+	retryDelay?: number;
+};
+export type V4RemoteBinding = {
+	remoteProxyConnectionString?: RemoteProxyConnectionString;
+};
+export type V4RemoteBindingWithName = V4RemoteBinding & { binding: string };
+export type V4WorkerOptionsShape = {
+	[key: string]: unknown;
+	name?: string;
+	rootPath?: string;
+	compatibilityDate?: string;
+	compatibilityFlags?: string[];
+	unsafeInspectorProxy?: boolean;
+	routes?: string[];
+	bindings?: Record<string, Json>;
+	wasmBindings?: Record<string, string | Uint8Array>;
+	textBlobBindings?: Record<string, string>;
+	dataBlobBindings?: Record<string, string | Uint8Array>;
+	serviceBindings?: Record<string, V4ServiceDesignator>;
+	outboundService?: V4ServiceDesignator;
+	unsafeEphemeralDurableObjects?: boolean;
+	unsafeDirectSockets?: Array<{
+		host?: string;
+		port?: number;
+		serviceName?: string;
+		entrypoint?: string;
+		proxy?: boolean;
+	}>;
+	unsafeOverrideFetchWorker?: string;
+	unsafeEvalBinding?: string;
+	unsafeUseModuleFallbackService?: boolean;
+	hasAssetsAndIsVitest?: boolean;
+	tails?: V4ServiceDesignator[];
+	streamingTails?: V4ServiceDesignator[];
+	stripCfConnectingIp?: boolean;
+	zone?: string;
+	unsafeBindings?: Array<{
+		name: string;
+		type: string;
+		plugin: { package: string; name: string };
+		options: Record<string, Json>;
+	}>;
+	cacheAPI?: boolean;
+	d1Databases?: V4Namespace;
+	durableObjects?: Record<string, string | V4DurableObject>;
+	additionalUnboundDurableObjects?: V4DurableObject[];
+	kvNamespaces?: V4Namespace;
+	sitePath?: string;
+	siteInclude?: string[];
+	siteExclude?: string[];
+	queueProducers?:
+		| Record<string, V4QueueProducerOptions>
+		| string[]
+		| Record<string, string>;
+	queueConsumers?: Record<string, V4QueueConsumerOptions> | string[];
+	r2Buckets?:
+		| Record<
+				string,
+				| string
+				| (V4IdEntry & {
+						s3Credentials?: { accessKeyId: string; secretAccessKey: string };
+				  })
+		  >
+		| string[];
+	hyperdrives?: Record<string, string | URL>;
+	ratelimits?: Record<
+		string,
+		{ namespace_id: string; simple: { limit: number; period?: 10 | 60 } }
+	>;
+	assets?: {
+		workerName?: string;
+		directory: string;
+		binding?: string;
+		routerConfig?: Record<string, unknown>;
+		assetConfig?: Record<string, unknown>;
+	};
+	workflows?: Record<
+		string,
+		{
+			name: string;
+			className: string;
+			scriptName?: string;
+			external?: boolean;
+			remoteProxyConnectionString?: RemoteProxyConnectionString;
+			stepLimit?: number;
+			compatibilityFlags?: string[];
+		}
+	>;
+	pipelines?:
+		| Record<
+				string,
+				| string
+				| ({ stream: string } & V4RemoteBinding)
+				| ({ pipeline: string } & V4RemoteBinding)
+		  >
+		| string[];
+	secretsStoreSecrets?: Record<
+		string,
+		{ store_id: string; secret_name: string }
+	>;
+	email?: {
+		send_email?: Array<
+			{
+				name: string;
+				remoteProxyConnectionString?: RemoteProxyConnectionString;
+				allowed_sender_addresses?: string[];
+			} & (
+				| {
+						destination_address?: string;
+						allowed_destination_addresses?: never;
+				  }
+				| {
+						allowed_destination_addresses?: string[];
+						destination_address?: never;
+				  }
+			)
+		>;
+	};
+	analyticsEngineDatasets?: Record<string, { dataset: string }>;
+	ai?: V4RemoteBindingWithName;
+	agentMemory?: Record<string, { namespace: string } & V4RemoteBinding>;
+	aiSearchNamespaces?: Record<
+		string,
+		{ namespace?: string; instance_name?: string } & V4RemoteBinding
+	>;
+	aiSearchInstances?: Record<
+		string,
+		{ namespace?: string; instance_name?: string } & V4RemoteBinding
+	>;
+	websearch?: Record<string, V4RemoteBinding>;
+	browserRendering?: V4RemoteBindingWithName & { headful?: boolean };
+	dispatchNamespaces?: Record<string, { namespace: string } & V4RemoteBinding>;
+	images?: V4RemoteBindingWithName;
+	stream?: V4RemoteBindingWithName;
+	vectorize?: Record<string, { index_name: string } & V4RemoteBinding>;
+	vpcNetworks?: Record<
+		string,
+		({ tunnel_id: string } | { network_id: string }) & V4RemoteBinding
+	>;
+	vpcServices?: Record<string, { service_id: string } & V4RemoteBinding>;
+	mtlsCertificates?: Record<
+		string,
+		{ certificate_id: string } & V4RemoteBinding
+	>;
+	helloWorld?: Record<string, { enable_timer?: boolean }>;
+	flagship?: Record<string, { app_id: string } & V4RemoteBinding>;
+	artifacts?: Record<string, { namespace: string } & V4RemoteBinding>;
+	workerLoaders?: Record<string, Record<string, never>>;
+	media?: V4RemoteBindingWithName;
+	versionMetadata?: string;
+};
+export type V4WorkerOptions = V4SourceOptions & V4WorkerOptionsShape;
 export type ParsedV4WorkerOptions = z.output<typeof V4WorkerOptionsSchema>;
-export type V4SharedOptions = z.input<typeof V4SharedOptionsSchema>;
+export type V4SharedOptions = {
+	[key: string]: unknown;
+	rootPath?: string;
+	host?: string;
+	port?: number;
+	https?: boolean;
+	httpsKey?: string;
+	httpsCert?: string;
+	inspectorPort?: number;
+	inspectorHost?: string;
+	verbose?: boolean;
+	log?: Log;
+	handleStructuredLogs?: (log: V4WorkerdStructuredLog) => void;
+	unsafeHandleRuntimeRestart?: () => Awaitable<void>;
+	handleUncaughtError?: (error: Error) => void;
+	upstream?: string;
+	cf?: boolean | string | Record<string, unknown>;
+	unsafeDevRegistryPath?: string;
+	unsafeHandleDevRegistryUpdate?: (registry: unknown) => void;
+	unsafeProxySharedSecret?: string;
+	unsafeModuleFallbackService?: V4FetchHandler;
+	unsafeTriggerHandlers?: boolean;
+	unsafeRuntimeEnv?: Record<string, string>;
+	unsafeLocalExplorer?: boolean;
+	unsafeObservability?: boolean;
+	unsafeInspectDurableObjects?: boolean;
+	logRequests?: boolean;
+	resourcePersistencePath?: string;
+	resourceTmpPath?: string;
+	stripDisablePrettyError?: boolean;
+	telemetry?: { enabled?: boolean; deviceId?: string };
+	publicUrl?: string;
+	containerEngine?:
+		| {
+				localDocker: {
+					socketPath: string;
+					containerEgressInterceptorImage?: string;
+				};
+		  }
+		| string;
+};
 export type ParsedV4SharedOptions = z.output<typeof V4SharedOptionsSchema>;
-export type V4MiniflareOptions = z.input<typeof V4MiniflareOptionsSchema>;
+export type V4MiniflareOptions = V4SharedOptions &
+	(V4WorkerOptions | { workers: V4WorkerOptions[] });
 export type ParsedV4MiniflareOptions = z.output<
 	typeof V4MiniflareOptionsSchema
 >;

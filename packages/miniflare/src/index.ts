@@ -3220,6 +3220,7 @@ export {
 	MiniflareWorkerConfigSchema,
 	WorkerOptionsSchema,
 } from "./config/schema";
+export { convertV4MiniflareOptions } from "./config/v4-convert";
 export type {
 	MiniflareOptions,
 	WorkerOptions,
@@ -3228,4 +3229,24 @@ export type {
 	LegacyConfig,
 	InstanceOptions,
 } from "./config/schema";
-export type { V4MiniflareOptions } from "./config/v4-schema";
+export type {
+	V4DurableObject,
+	V4FetchHandler,
+	V4IdEntry,
+	V4MiniflareOptions,
+	V4ModuleDefinition,
+	V4ModuleRule,
+	V4ModuleRuleType,
+	V4Namespace,
+	V4NodeHandler,
+	V4QueueConsumerOptions,
+	V4QueueProducerOptions,
+	V4RemoteBinding,
+	V4RemoteBindingWithName,
+	V4SharedOptions,
+	V4ServiceDesignator,
+	V4SourceOptions,
+	V4WorkerOptions,
+	V4WorkerOptionsShape,
+	V4WorkerdStructuredLog,
+} from "./config/v4-schema";
